@@ -38,7 +38,7 @@ jobs:
               const runs = await github.paginate(github.rest.actions.listWorkflowRunsForRepo, {
                 ...repo, branch: context.ref.replace('refs/heads/', ''), status, per_page: 100,
               });
-              const active = runs.find(run => ['LLVM', 'toolchain', 'MPV'].includes(run.name));
+              const active = runs.find(run => ['llvm.yml', 'toolchain.yml', 'mpv.yml'].some(file => run.path === '.github/workflows/' + file));
               if (active)
               {
                 core.notice('Build chain is already active: ' + active.html_url);
