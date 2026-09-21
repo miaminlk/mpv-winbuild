@@ -1,31 +1,38 @@
 # mpv-winbuild
 
-[![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/zhongfly/mpv-winbuild/mpv.yml?branch=main&cacheSeconds=1800)](https://github.com/zhongfly/mpv-winbuild/actions)
-[![releases](https://img.shields.io/github/v/release/zhongfly/mpv-winbuild?cacheSeconds=1800)](https://github.com/zhongfly/mpv-winbuild/releases/latest)
-[![downloads](https://img.shields.io/github/downloads/zhongfly/mpv-winbuild/total?cacheSeconds=1800)](https://github.com/zhongfly/mpv-winbuild/releases)
+[![Build](https://img.shields.io/github/actions/workflow/status/miaminlk/mpv-winbuild/mpv.yml?branch=main)](https://github.com/miaminlk/mpv-winbuild/actions)
+[![Release](https://img.shields.io/github/v/release/miaminlk/mpv-winbuild)](https://github.com/miaminlk/mpv-winbuild/releases/latest)
 
-Use Github Action to build mpv for Windows with latest commit.
+基于 [zhongfly/mpv-winbuild](https://github.com/zhongfly/mpv-winbuild) 和 [shinchiro/mpv-winbuild-cmake](https://github.com/shinchiro/mpv-winbuild-cmake)，为 Windows 构建带外部音轨 seek 修复的 **GPL x86_64-v3 libmpv**。
 
-Based on <https://github.com/shinchiro/mpv-winbuild-cmake>.
+## 构建与下载
 
-## Auto-Builds
+- 保留上游 GPL 依赖、Clang/LTO 和打包流程。只发布 `mpv-dev-x86_64-v3-*.7z` 与 `sha256.txt`。
+- 开发包包含 `libmpv-2.dll`、导入库和头文件；不发布 ffmpeg.exe、mpv 播放器或调试包。不构建 LGPL 变体。
+- 成品在构建 runner 内校验 DLL 补丁标记和归档，再直接上传 Release；发布不依赖 Actions artifacts。
+- Release 标签指向本仓库的工作流/补丁提交，说明中记录实际编译的 MPV 源码提交。
+- 公开仓库只使用标准 GitHub-hosted runner 和仓库自带的 `GITHUB_TOKEN`，不需要个人访问令牌。
 
-Checks the mpv repository every hour for updates. If there is an update and it is relevant to the windows build, it will automatically run the compilation and **release it on success**.
+## 自动构建
 
-This repo only provides 64-bit version. If you need a 32-bit version, you can fork this repo and run `MPV` workflow by yourself.
+`Daily Build` 每天 UTC 12:17（北京时间 20:17）执行，也可手动运行。GitHub 定时调度可能延迟。
 
-> [!NOTE]
-> `mpv-dev-xxxx.7z` is libmpv, including the `libmpv-2.dll` file.
->
-> Some media players based on libmpv use `libmpv-2.dll` or `mpv-2.dll`.You can upgrade their libmpv by overwriting this dll.
->
-> `mpv-dev-lgpl-xxxx.7z` is libmpv under LGPLv2.1+ license, which disables LGPLv2.1+ incompatible packages and statically links to ffmpeg under LGPLv3.
-> 
-> I'm not a lawyer and can't guarantee that I've disabled all LGPL-incompatible packages, use at your own risk.
+首次运行先构建 **LLVM → toolchain（MinGW 与 Rust）→ MPV → Release**，各阶段成功后才触发下一阶段。后续每日复用缓存构建 MPV；LLVM 每隔至少 7 天更新，缓存缺失时自动选择对应的引导流程。同类工作流不会并发构建；日程遇到尚未结束的构建链会跳过本次派发。
 
-### Release Retention Policy
+也可以手动运行 `LLVM`，保留 `trigger_toolchain=true`、`trigger_build=true` 并设置 `release=true`。首次构建 LLVM 耗时较长；检查当前 job 的实际步骤，不要把正在构建工具链误认为 MPV 已开始编译。
 
--   The last 30 days of builds will be retained.
+- Release 按发布时间只保留最近 48 小时，日程和成功发布后都会清理；不会删除源码提交或 Git 标签。
+- Actions 工件只保留 2 天。日志上传是辅助步骤，其失败不会阻止已校验 DLL 发布。
+- 手动关闭 `release` 时，DLL 开发包才通过 Actions artifact 提供，仍受 artifact 配额约束。
+- 更新上游时保留本仓库工作流配置与 `mpv-patches/`，不要重新引入旧依赖补丁。以当前上游修复为准。
+
+## 音轨补丁
+
+`mpv-patches/apply_external_audio_seek_patch.py` 按函数与唯一语义锚点修改 MPV，而不是依赖固定行号。非精确、向后关键帧 seek 时，外部音轨等待视频实际起点，再对齐音频；内部音轨、精确 seek 等路径保留上游行为。该补丁不是对所有外部/内部音轨行为的整体重写。
+
+`install_mpv_patch_command.py` 将它挂入 CMake 的 MPV `PATCH_COMMAND`，保证在 `ninja update` 与 `mpv-fullclean` 重置源码之后执行。重复应用不会重复插入；锚点不唯一、补丁残缺或上游出现未知 patch 命令时立即失败，需要审查兼容性，不会无补丁静默发布。
+
+每次发布会在实际 DLL 中验证补丁日志标记。此检查不能代替播放器中对音画同步的实际测试。
 
 ## Information about packages
 

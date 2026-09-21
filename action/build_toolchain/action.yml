@@ -25,11 +25,14 @@ runs:
       run: |
         set -x
         cd mpv-winbuild-cmake
-        if [[ "$(ls -A ../patch/*.patch)" ]]; then
-          for patch in ../patch/*.patch ; do
-            git am --3way "$patch" || git am --abort
-          done
-        fi
+        for patch in ../patch/*.patch; do
+          [[ -f "$patch" ]] || continue
+          if git apply --reverse --check "$patch" 2>/dev/null; then
+            echo "Already applied: $patch"
+          else
+            git am --3way "$patch" || { git am --abort; exit 1; }
+          fi
+        done
 
     - name: Build
       shell: bash

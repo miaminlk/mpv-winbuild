@@ -1,6 +1,10 @@
 name: LLVM
 run-name: "${{ inputs.run_name != '' && inputs.run_name || github.workflow }}"
 
+permissions:
+  contents: read
+  actions: write
+
 on: 
   workflow_dispatch:
     inputs:
@@ -22,15 +26,10 @@ on:
       build_target:
         description: "Toolchain build target"
         required: false
-        default: "all-64bit"
+        default: "64bit-v3"
         type: choice
         options:
-        - 32bit
-        - 64bit
         - 64bit-v3
-        - aarch64
-        - all-64bit
-        - all
       trigger_build:
         description: "Trigger mpv build action after toolchain build"
         required: false
@@ -44,6 +43,10 @@ on:
       run_name:
         description: 'The name displayed in the list of workflow runs'
         required: false
+
+concurrency:
+  group: llvm-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   build_llvm:
@@ -111,7 +114,7 @@ jobs:
         with:
           bit: "64-v3"
           compiler: "clang"
-          command: "ninja -C $buildroot/build$bit llvm && rm -rf clang_root/llvm-thinlto || true"
+          command: "ninja -C $buildroot/build$bit llvm && rm -rf clang_root/llvm-thinlto"
           extra_option: "-DLLVM_ENABLE_PGO=USE -DLLVM_ENABLE_LTO=Thin -DLLVM_PROFDATA_FILE=$buildroot/llvm.profdata"
 
       - name: Save llvm cache
@@ -123,15 +126,25 @@ jobs:
           key: llvm-${{ steps.suffix.outputs.cache_suffix }}
 
       - name: Collect logs
+        continue-on-error: true
         if: ${{ always() }}
+        shell: bash
         run: |
-          sudo 7z a logs.7z $(find mpv-winbuild-cmake -type f -iname "*-*.log")
+          [[ -d mpv-winbuild-cmake ]] || exit 0
+          mapfile -d '' log_files < <(find mpv-winbuild-cmake -type f \( -iname "*-*.log" -o -path "*/ffbuild/config.log" \) -print0)
+          if (( ${#log_files[@]} )); then
+            sudo 7z a logs.7z "${log_files[@]}"
+          else
+            echo "No build logs to upload."
+          fi
       - name: upload logs
+        continue-on-error: true
         uses: actions/upload-artifact@v7
         if: ${{ always() }}
         with:
           name: llvm_logs
           path: logs.7z
+          retention-days: 2
 
 
   trigger:

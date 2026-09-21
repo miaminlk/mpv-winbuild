@@ -1,6 +1,10 @@
 name: toolchain
 run-name: "${{ inputs.run_name != '' && format('{0} ({1})', inputs.run_name, inputs.compiler) || format('{0} ({1})', github.workflow, inputs.compiler) }}"
 
+permissions:
+  contents: read
+  actions: write
+
 on: 
   # schedule:
   #   - cron:  '0 12 * * *'
@@ -9,21 +13,15 @@ on:
       build_target:
         description: "Build target"
         required: false
-        default: "all-64bit"
+        default: "64bit-v3"
         type: choice
         options:
-        - 32bit
-        - 64bit
         - 64bit-v3
-        - aarch64
-        - all-64bit
-        - all
       compiler:
         required: false
         default: "clang"
         type: choice
         options:
-        - gcc
         - clang
       no_save_cache:
         description: "Don't save caches after success build"
@@ -44,6 +42,10 @@ on:
         description: 'The name displayed in the list of workflow runs'
         required: false
 
+concurrency:
+  group: toolchain-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   params:
     runs-on: ubuntu-latest
@@ -55,31 +57,7 @@ jobs:
         uses: actions/github-script@v9
         with:
           script: |
-            let matrix = {};
-            let build_target = "${{ inputs.build_target }}"
-            switch ( build_target ) {
-              case "32bit":
-                matrix.bit = ["32"];
-                break;
-              case "64bit":
-                matrix.bit = ["64"];
-                break;
-              case "64bit-v3":
-                matrix.bit = ["64-v3"];
-                break;
-              case "aarch64":
-                matrix.bit = ["aarch64"];
-                break;
-              case "all-64bit":
-                matrix.bit = ["64","64-v3","aarch64"];
-                break;
-              case "all":
-                matrix.bit = ["32","64","64-v3","aarch64"];
-                break;
-              default:
-                matrix.bit = ["64","64-v3","aarch64"];
-                break;
-            }
+            let matrix = {bit: ["64-v3"]};
             core.setOutput("matrix",JSON.stringify(matrix));
 
       - id: suffix
@@ -93,7 +71,6 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: ghcr.io/archlinux/archlinux:base-devel
-    continue-on-error: true
     strategy:
       matrix: ${{ fromJson(needs.params.outputs.matrix) }}
 
@@ -161,15 +138,25 @@ jobs:
           key: ${{ matrix.bit }}-clang_root-${{ needs.params.outputs.cache_suffix }}
 
       - name: Collect logs
+        continue-on-error: true
         if: ${{ always() }}
+        shell: bash
         run: |
-          sudo 7z a logs.7z $(find mpv-winbuild-cmake -type f -iname "*-*.log" -or -wholename "*/ffbuild/config.log")
+          [[ -d mpv-winbuild-cmake ]] || exit 0
+          mapfile -d '' log_files < <(find mpv-winbuild-cmake -type f \( -iname "*-*.log" -o -path "*/ffbuild/config.log" \) -print0)
+          if (( ${#log_files[@]} )); then
+            sudo 7z a logs.7z "${log_files[@]}"
+          else
+            echo "No build logs to upload."
+          fi
       - name: upload logs
+        continue-on-error: true
         uses: actions/upload-artifact@v7
         if: ${{ always() }}
         with:
           name: ${{ matrix.bit }}_logs
           path: logs.7z
+          retention-days: 2
 
   rust:
     name: Install Rust Toolchain
@@ -177,7 +164,6 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: ghcr.io/archlinux/archlinux:base-devel
-    continue-on-error: true
 
     steps:
       - name: Install Dependencies
@@ -213,7 +199,7 @@ jobs:
 
   trigger:
     needs: [build,params,rust]
-    if: ${{ always() && inputs.trigger_build != false && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}
+    if: ${{ always() && inputs.trigger_build != false && !inputs.no_save_cache && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}
     runs-on: ubuntu-latest
     permissions:
       actions: write
