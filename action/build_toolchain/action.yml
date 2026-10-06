@@ -33,6 +33,7 @@ runs:
             git am --3way "$patch" || { git am --abort; exit 1; }
           fi
         done
+        cp ../dependency-patches/curl-*.patch packages/
 
     - name: Build
       shell: bash

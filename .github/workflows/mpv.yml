@@ -371,6 +371,7 @@ jobs:
             fi
           done
           python ../mpv-patches/install_mpv_patch_command.py
+          cp ../dependency-patches/curl-*.patch packages/
           if grep -Eq -- '-Dgpl=false|--disable-gpl' packages/mpv.cmake packages/ffmpeg.cmake; then
             echo "::error::GPL features must remain enabled."
             exit 1
