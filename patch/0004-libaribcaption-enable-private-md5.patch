@@ -1,0 +1,23 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>
+Date: Tue, 6 Oct 2026 21:00:00 +0800
+Subject: [PATCH] libaribcaption: compile its renamed private MD5 implementation
+
+libaribcaption 6c3b4f361bc8 renamed its MD5 symbols to aribcc_md5_*.
+Its header no longer redirects to OpenSSL, but HAVE_OPENSSL still excludes
+the implementation in md5.c. Stop defining this obsolete switch to avoid
+undefined symbols when linking FFmpeg and libmpv. OpenSSL remains enabled
+for FFmpeg and the other dependencies.
+
+diff --git a/packages/libaribcaption.cmake b/packages/libaribcaption.cmake
+--- a/packages/libaribcaption.cmake
++++ b/packages/libaribcaption.cmake
+@@ -20,8 +20,6 @@ ExternalProject_Add(libaribcaption
+         -DARIBCC_NO_RTTI=ON
+         -DARIBCC_USE_FONTCONFIG=ON
+         -DARIBCC_USE_FREETYPE=ON
+-        "-DCMAKE_C_FLAGS='-DHAVE_OPENSSL=1'"
+-        "-DCMAKE_CXX_FLAGS='-DHAVE_OPENSSL=1'"
+     BUILD_COMMAND ${EXEC} ninja -C <BINARY_DIR>
+     INSTALL_COMMAND ${EXEC} ninja -C <BINARY_DIR> install
+     LOG_DOWNLOAD 1 LOG_UPDATE 1 LOG_CONFIGURE 1 LOG_BUILD 1 LOG_INSTALL 1
